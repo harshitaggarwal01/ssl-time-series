@@ -1,0 +1,16 @@
+{
+  "slug": "stable-challenge-time-series",
+  "title": "stable-challenge-time-series",
+  "description": "",
+  "metric": "score",
+  "direction": "maximize",
+  "evaluator_version": "eval-6f01436118711eefcdcd68b7c73cbcc6-35d7e8ed",
+  "closes_at": null,
+  "anonymous": true,
+  "accepting_submissions": true,
+  "max_bytes": 20971520,
+  "daily_limit": 5,
+  "repository": "galilai-group/stable-challenge-time-series",
+  "service_url": "https://script.google.com/macros/s/AKfycbz-LjlcVuaQ0fbjhPGhYtDi4XxTItsGMrmSXUkP4X59IkPv6WF-sJ-P3dHDJtJlBTb5/exec",
+  "submit_url": "https://script.google.com/macros/s/AKfycbz-LjlcVuaQ0fbjhPGhYtDi4XxTItsGMrmSXUkP4X59IkPv6WF-sJ-P3dHDJtJlBTb5/exec?challenge=stable-challenge-time-series"
+}
