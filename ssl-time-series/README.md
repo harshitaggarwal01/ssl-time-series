@@ -29,6 +29,12 @@ The corpus is large and should remain outside Git. `corpus_loader.py` memory
 maps it; the training sampler never loads the concatenated values array into
 RAM.
 
+For a complete Google Colab workflow, open
+[`notebooks/baseline_colab.ipynb`](notebooks/baseline_colab.ipynb). It clones
+this branch, installs dependencies, downloads and extracts the official
+corpus, trains the baseline, exports ONNX, runs the official checks, and
+executes the proxy evaluation.
+
 ## Implemented design
 
 - Static evaluator contract: `[64, 1, 1024] -> [64, D]`.
