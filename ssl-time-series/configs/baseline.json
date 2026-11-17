@@ -1,0 +1,14 @@
+{
+  "steps": 2000,
+  "batch_size": 64,
+  "workers": 0,
+  "windows_per_series": 1,
+  "validation_fraction": 0.05,
+  "embed_dim": 256,
+  "patch_size": 32,
+  "depth": 4,
+  "heads": 4,
+  "learning_rate": 0.0003,
+  "seed": 0,
+  "log_every": 100
+}

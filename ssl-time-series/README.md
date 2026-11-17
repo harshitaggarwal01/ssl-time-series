@@ -1,4 +1,54 @@
-# stable-challenge-time-series
+# ssl-time-series
+
+Finance-informed self-supervised time-series encoder for the Stable Challenge.
+
+The repository preserves the official evaluator and adds a compact training
+package under `ssl_time_series/`. The model is trained only from the challenge
+corpus. Stable Finance and GS Quant are used as methodological references for
+causal returns, volatility, normalization, and multiscale features; neither
+project supplies training data or pretrained weights.
+
+## Quick start
+
+```bash
+uv sync
+unzip corpus.zip -d corpus
+uv run python -m scripts.profile_corpus --corpus corpus
+uv run python -m scripts.train_encoder \
+  --corpus corpus \
+  --config configs/main.json \
+  --output outputs/main.pt
+uv run python -m scripts.export_model \
+  --checkpoint outputs/main.pt \
+  --output outputs/model.onnx
+uv run test_submission.py outputs/model.onnx
+uv run python -m scripts.proxy_evaluate outputs/model.onnx
+```
+
+The corpus is large and should remain outside Git. `corpus_loader.py` memory
+maps it; the training sampler never loads the concatenated values array into
+RAM.
+
+## Implemented design
+
+- Static evaluator contract: `[64, 1, 1024] -> [64, D]`.
+- Per-window finite handling and normalization inside the model.
+- Derived normalized level, difference, and magnitude channels.
+- Compact patch transformer with LayerNorm and mean pooling.
+- Scale, offset, noise, and contiguous patch masking augmentations.
+- Masked reconstruction, multi-view contrastive, and next-step auxiliary losses.
+- Deterministic series-level sampling and checkpoint metadata.
+- ONNX export and synthetic proxy-task evaluation.
+
+## Documentation
+
+- [Challenge specification](CHALLENGE.md)
+- [Implementation plan and to-do](docs/IMPLEMENTATION_PLAN.md)
+- [Stable Finance reference](https://github.com/galilai-group/stable-finance)
+- [GS Quant reference](https://github.com/goldmansachs/gs-quant)
+
+The challenge rules, including the 20 MiB ONNX limit and corpus-only training
+requirement, take precedence over all research ideas.
 
 
 

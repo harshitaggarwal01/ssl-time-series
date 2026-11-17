@@ -5,3 +5,6 @@ eval_data/
 *.zip
 model.onnx
 !example_submission/model.onnx
+outputs/
+*.pt
+*.onnx
