@@ -7,6 +7,11 @@ from pathlib import Path
 
 import torch
 
+# Disable PyTorch's native TransformerEncoderLayer fast path. It exports an
+# unsupported aten::_transformer_encoder_layer_fwd operator.
+if hasattr(torch.backends, "mha") and hasattr(torch.backends.mha, "set_fastpath_enabled"):
+    torch.backends.mha.set_fastpath_enabled(False)
+
 from ssl_time_series.export import export_encoder
 from ssl_time_series.model import SeriesEncoder
 
