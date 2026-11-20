@@ -35,6 +35,29 @@ this branch, installs dependencies, downloads and extracts the official
 corpus, trains the baseline, exports ONNX, runs the official checks, and
 executes the proxy evaluation.
 
+## Masked SSL track (`research/masked-ssl`)
+
+Masked reconstruction plus a crop-view contrastive term, with untrained
+spectrum and random-kernel features appended at export. The recommended
+candidate is a 0.48M-parameter dilated convolutional encoder (6.65 MiB ONNX,
+1,925 dimensions), included as
+[`models/candidate-conv.onnx`](models/candidate-conv.onnx).
+
+```bash
+uv run python -m scripts.proxy_ucr --out eval_data/ucr        # UCR proxy set, evaluation only
+uv run python -m scripts.train_mae --corpus corpus --output outputs/conv.pt \
+  --arch conv --depth 8 --real-only --contrast 1.0 --view crop
+uv run python -m scripts.export_model --checkpoint outputs/conv.pt \
+  --output outputs/conv.onnx --pooling mean_std --fixed
+uv run python test_submission.py outputs/conv.onnx
+uv run python evaluate.py outputs/conv.onnx eval_data/ucr --out outputs/conv.ucr.json
+```
+
+Results and recommendations are in the
+[Track 3 report](docs/reports/track3-masked-ssl.md); the same steps with a
+short smoke-test option are in
+[`notebooks/masked_ssl_walkthrough.ipynb`](notebooks/masked_ssl_walkthrough.ipynb).
+
 ## Implemented design
 
 - Static evaluator contract: `[64, 1, 1024] -> [64, D]`.

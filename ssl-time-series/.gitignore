@@ -8,3 +8,6 @@ model.onnx
 outputs/
 *.pt
 *.onnx
+
+data/
+.dev/docs
