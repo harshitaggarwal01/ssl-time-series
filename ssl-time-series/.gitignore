@@ -8,3 +8,5 @@ model.onnx
 outputs/
 *.pt
 *.onnx
+logs/
+.uv-cache/
