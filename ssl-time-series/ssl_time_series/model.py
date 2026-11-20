@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from .constants import CHANNELS, CONTEXT
-from .preprocessing import derived_channels
+from .preprocessing import derived_channels, feature_channel_count
 
 
 class SeriesEncoder(nn.Module):
@@ -19,6 +19,7 @@ class SeriesEncoder(nn.Module):
         depth: int = 4,
         num_heads: int = 5,
         dropout: float = 0.0,
+        feature_groups: tuple[str, ...] | list[str] = (),
     ):
         super().__init__()
         if CONTEXT % patch_size:
@@ -28,7 +29,14 @@ class SeriesEncoder(nn.Module):
         self.embed_dim = embed_dim
         self.patch_size = patch_size
         self.patch_count = CONTEXT // patch_size
-        self.patch = nn.Conv1d(3, embed_dim, kernel_size=patch_size, stride=patch_size, bias=True)
+        self.feature_groups = tuple(feature_groups)
+        self.patch = nn.Conv1d(
+            feature_channel_count(self.feature_groups),
+            embed_dim,
+            kernel_size=patch_size,
+            stride=patch_size,
+            bias=True,
+        )
         self.position = nn.Parameter(torch.zeros(1, self.patch_count, embed_dim))
         layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -44,7 +52,7 @@ class SeriesEncoder(nn.Module):
         nn.init.trunc_normal_(self.position, std=0.02)
 
     def tokens(self, x: torch.Tensor) -> torch.Tensor:
-        features = derived_channels(x)
+        features = derived_channels(x, self.feature_groups)
         tokens = self.patch(features).transpose(1, 2)
         return self.transformer(tokens + self.position)
 

@@ -29,6 +29,24 @@ The corpus is large and should remain outside Git. `corpus_loader.py` memory
 maps it; the training sampler never loads the concatenated values array into
 RAM.
 
+Training writes a resumable checkpoint every 500 steps by default and once
+more at completion. Set `--checkpoint-every` to change the interval, or `0` to
+disable periodic saves. To continue a run from a checkpoint at step 2,000 and
+train through step 4,000, reuse the same architecture, feature groups, and seed:
+
+```bash
+uv run python -m scripts.train_encoder \
+  --corpus corpus \
+  --config configs/main.json \
+  --steps 4000 \
+  --resume outputs/main.pt \
+  --output outputs/main.pt
+```
+
+The checkpoint restores the encoder, training heads, optimizer, loss history,
+and random-number-generator state. The data-loader shuffle position is not
+stored, so the resumed run may see windows in a different order.
+
 For a complete Google Colab workflow, open
 [`notebooks/baseline_colab.ipynb`](notebooks/baseline_colab.ipynb). It clones
 this branch, installs dependencies, downloads and extracts the official

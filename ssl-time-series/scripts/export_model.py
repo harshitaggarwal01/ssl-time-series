@@ -30,6 +30,7 @@ def main() -> None:
         patch_size=int(config.get("patch_size", 32)),
         depth=int(config.get("depth", 4)),
         num_heads=int(config.get("heads", 5)),
+        feature_groups=config.get("feature_groups", []),
     )
     encoder.load_state_dict(checkpoint["encoder"])
     path = export_encoder(encoder, args.output)
