@@ -27,7 +27,8 @@ class CorpusWindowDataset(Dataset):
         start: int = 0,
         stop: int | None = None,
     ):
-        self.get, total = corpus_loader.load(root)
+        self.root = root
+        self.get, total = None, corpus_loader.load(root)[1]  # opened on first use so workers can pickle the dataset
         self.start = start
         self.stop = total if stop is None else min(stop, total)
         self.windows_per_series = max(1, windows_per_series)
@@ -41,16 +42,21 @@ class CorpusWindowDataset(Dataset):
             raise IndexError(index)
         series_index = self.start + index // self.windows_per_series
         window_number = index % self.windows_per_series
+        if self.get is None:
+            self.get = corpus_loader.load(self.root)[0]
         series = np.asarray(self.get(series_index), dtype=np.float32)
         if len(series) <= CONTEXT:
+            raw = series
             window = pad_left(series)
         else:
             max_start = len(series) - CONTEXT
             seed = (self.seed * 1_000_003 + series_index * 97 + window_number) & 0xFFFFFFFF
             rng = np.random.default_rng(seed)
-            window = series[int(rng.integers(0, max_start + 1)) :][:CONTEXT]
+            raw = window = series[int(rng.integers(0, max_start + 1)) :][:CONTEXT]
+        valid = np.zeros(CONTEXT, dtype=bool)  # real (not padding) and finite points
+        valid[CONTEXT - len(raw) :] = np.isfinite(raw)
         window = np.nan_to_num(window, nan=0.0, posinf=0.0, neginf=0.0)
-        return {"x": torch.from_numpy(window.copy()).float().unsqueeze(0)}
+        return {"x": torch.from_numpy(window.copy()).float().unsqueeze(0), "valid": torch.from_numpy(valid)}
 
 
 def split_indices(total: int, validation_fraction: float = 0.05) -> tuple[int, int]:
