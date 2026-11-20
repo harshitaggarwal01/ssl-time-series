@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 import random
+import sys
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +18,25 @@ import corpus_loader
 from ssl_time_series.data import CorpusWindowDataset, split_indices
 from ssl_time_series.model import SeriesEncoder
 from ssl_time_series.objectives import SSLModule
+
+
+class _Tee:
+    """Write terminal output to both the original stream and a log file."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, value: str) -> int:
+        for stream in self.streams:
+            stream.write(value)
+        return len(value)
+
+    def flush(self) -> None:
+        for stream in self.streams:
+            stream.flush()
+
+    def isatty(self) -> bool:
+        return any(getattr(stream, "isatty", lambda: False)() for stream in self.streams)
 
 
 def _save_checkpoint(
@@ -29,7 +50,9 @@ def _save_checkpoint(
     step: int,
 ) -> Path:
     """Atomically save enough state to export or continue training."""
-    path = path.with_name(f"{path.stem}-step-{step:06d}{path.suffix}")
+    checkpoint_dir = path.parent / path.stem
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    path = checkpoint_dir / f"step-{step:06d}{path.suffix or '.pt'}"
     checkpoint = {
         "step": step,
         "encoder": encoder.state_dict(),
@@ -172,7 +195,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--corpus", type=Path, required=True)
-    parser.add_argument("--output", type=Path, default=Path("outputs/encoder.pt"))
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/encoder.pt"),
+        help="checkpoint name; step-numbered files go in a folder with this name",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=None,
+        help="training log path (default: <output folder>/train.log)",
+    )
     parser.add_argument("--steps", type=int, default=2_000)
     parser.add_argument("--checkpoint-every", type=int, default=500, help="save every N steps; 0 disables periodic saves")
     parser.add_argument("--resume", type=Path, default=None, help="resume from a training checkpoint")
@@ -202,7 +236,23 @@ def main() -> None:
     args = parser.parse_args()
     if args.checkpoint_every < 0:
         parser.error("--checkpoint-every must be nonnegative")
-    train(args)
+    log_file = args.log_file or (args.output.parent / args.output.stem / "train.log")
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    original_stdout, original_stderr = sys.stdout, sys.stderr
+    with log_file.open("a", encoding="utf-8", buffering=1) as log_stream:
+        sys.stdout = _Tee(original_stdout, log_stream)
+        sys.stderr = _Tee(original_stderr, log_stream)
+        try:
+            print(json.dumps({"event": "train_start", "args": vars(args)}, default=str), flush=True)
+            train(args)
+        except BaseException:
+            traceback.print_exc(file=log_stream)
+            log_stream.flush()
+            raise
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            sys.stdout, sys.stderr = original_stdout, original_stderr
 
 
 if __name__ == "__main__":
