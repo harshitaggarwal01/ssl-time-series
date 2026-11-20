@@ -1,13 +1,14 @@
 #!/bin/bash
-# Score ONNX candidates with the official evaluate.py on the synthetic proxy suite (CPU).
+# Score ONNX candidates with the official evaluate.py on the synthetic proxy suite (GPU, like the leaderboard).
 #   sbatch slurm/eval_models.sbatch outputs/baseline.onnx outputs/baseline-s1.onnx ...
 # Builds + calibrates outputs/proxy_suite first if it does not exist (floor = untrained encoder,
 # reference = example_submission/model.onnx). Writes outputs/eval/<name>.json and a combined table.
 #SBATCH --job-name=ssl-eval
-#SBATCH --partition=batch
-#SBATCH --cpus-per-task=16
+#SBATCH --partition=gpu-debug
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=01:00:00
+#SBATCH --time=00:45:00
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 PROJECT="${SLURM_SUBMIT_DIR:?submit from ssl-time-series/ssl-time-series}"
@@ -38,9 +39,12 @@ from pathlib import Path
 rows = []
 for f in sorted(Path("outputs/eval").glob("*.json")):
     r = json.loads(f.read_text())
-    rows.append((f.stem, r["score"], [round(t["auc"], 3) for t in r["tasks"].values()]))
+    aucs = [t["auc"] for t in r["tasks"].values()]
+    rows.append((f.stem, r["score"], sum(aucs) / len(aucs), aucs))
 names = [t["name"] for t in json.loads(Path("outputs/proxy_suite/tasks.json").read_text())["tasks"]]
-print("model".ljust(28), "score ", " ".join(n[:8].rjust(8) for n in names))
-for name, score, aucs in sorted(rows, key=lambda r: -r[1]):
-    print(name.ljust(28), f"{score:6.3f}", " ".join(f"{a:8.3f}" for a in aucs))
+lines = ["| model | score | mean AUC | " + " | ".join(names) + " |", "|---" * (len(names) + 3) + "|"]
+for name, score, mean, aucs in sorted(rows, key=lambda r: -r[1]):
+    lines.append(f"| {name} | {score:.3f} | {mean:.3f} | " + " | ".join(f"{a:.3f}" for a in aucs) + " |")
+Path("outputs/eval/TABLE.md").write_text("\n".join(lines) + "\n")
+print("\n".join(lines))
 PY

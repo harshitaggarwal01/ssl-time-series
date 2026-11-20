@@ -7,7 +7,7 @@ Last updated: Fri 20 Nov 2026. Supersedes the Phase 1/Phase 2 timing in
 
 | Track | Owner | Branch | Status (20 Nov) |
 | --- | --- | --- | --- |
-| 1 Baseline reproduction | Harshit | `research/baseline` | **Done.** Trained, exported, passes all `test_submission.py` checks. Results: [BASELINE_REPORT.md](BASELINE_REPORT.md). |
+| 1 Baseline reproduction | Harshit | `research/baseline` | **Done.** 2k baseline 1.059 ± 0.017 (3 seeds); `main` 20k **1.217**; official example = 1.000. All pass `test_submission.py`. [BASELINE_REPORT.md](BASELINE_REPORT.md) |
 | 2 Finance features | Frank | `research/finance` | Code pushed (feature groups `multiscale`, `log_returns`, `volatility`, `momentum`, `scale`; resumable checkpoints). No results yet. |
 | 3 Masked SSL | — | none pushed | Not started on GitHub. |
 | 4 Contrastive / augmentations | — | none pushed | Not started on GitHub. |
@@ -59,6 +59,10 @@ The suite is a proxy. It checks generic temporal structure; it does not replace 
 - 2,000 steps, seed 0, `configs/baseline.json` architecture unless architecture is your variable.
 - Report seeds 0, 1 and 2 for your best variant. The baseline's seed spread is the noise floor:
   a gain smaller than that is not a gain.
+- **The bar to beat:** the 2k baseline scores **1.059 ± 0.017** on suite v2.1 (mean AUC 0.809). A
+  variant needs a score of about **1.095 or more** before we treat it as a real improvement.
+- Tasks where the official example does not beat random weights (volatility_regime, anomaly) have
+  weight 0 in the score. Report their AUC, because volatility is where our channels help most.
 - Report: proxy-suite score and per-task AUC, ONNX size, `test_submission.py` output, exact command.
 - Add your row to the results table in [BASELINE_REPORT.md](BASELINE_REPORT.md) or send it to Harshit.
 

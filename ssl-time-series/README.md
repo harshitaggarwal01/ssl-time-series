@@ -25,6 +25,21 @@ uv run test_submission.py outputs/model.onnx
 uv run python -m scripts.proxy_evaluate outputs/model.onnx
 ```
 
+### Comparing candidates (proxy suite v2)
+
+`scripts/proxy_evaluate.py` saturates (AUC 1.0) and cannot rank models. Score candidates with the
+official evaluator on the calibrated 8-task synthetic suite instead (0 = untrained encoder,
+1 = `example_submission/model.onnx`):
+
+```bash
+uv run python -m scripts.build_proxy_suite --out outputs/proxy_suite
+uv run evaluate.py outputs/model.onnx outputs/proxy_suite --out outputs/eval/model.json
+```
+
+On Oscar, `slurm/` has GPU job scripts for training, export, validation and scoring; see
+[docs/BASELINE_REPORT.md](docs/BASELINE_REPORT.md) for the exact commands and
+[docs/STATUS_AND_PLAN.md](docs/STATUS_AND_PLAN.md) for the plan to the final presentation.
+
 The corpus is large and should remain outside Git. `corpus_loader.py` memory
 maps it; the training sampler never loads the concatenated values array into
 RAM.

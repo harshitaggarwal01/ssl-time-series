@@ -53,17 +53,17 @@ def _ar1(rng, n, phi, sigma=1.0):
 def shape(rng, c):
     t = np.linspace(0, 1, CONTEXT)
     base = [t, np.sin(2 * np.pi * 6 * t), np.sin(2 * np.pi * 2 * t), (t >= 0.5).astype(float)][c]
-    return base + rng.normal(0, 0.05, CONTEXT)
+    return base + rng.normal(0, 0.8, CONTEXT)
 
 
 def frequency(rng, c):
     cycles = [3, 8, 20, 50, 120][c] * rng.uniform(0.85, 1.15)
     t = np.arange(CONTEXT) / CONTEXT
-    return np.sin(2 * np.pi * cycles * t + rng.uniform(0, 2 * np.pi)) + rng.normal(0, 0.3, CONTEXT)
+    return np.sin(2 * np.pi * cycles * t + rng.uniform(0, 2 * np.pi)) + rng.normal(0, 2.5, CONTEXT)
 
 
 def trend(rng, c):
-    drift = [-1.0, 0.0, 1.0][c] * 0.08
+    drift = [-1.0, 0.0, 1.0][c] * 0.03
     return np.cumsum(drift + rng.normal(0, 1, CONTEXT))
 
 
@@ -88,19 +88,19 @@ def change_point(rng, c):
     x = rng.normal(0, 1, CONTEXT)
     if c > 0:
         lo, hi = (CONTEXT // 8, CONTEXT // 2) if c == 1 else (CONTEXT // 2, 7 * CONTEXT // 8)
-        x[rng.integers(lo, hi) :] += rng.choice([-1, 1]) * rng.uniform(1.5, 3.0)
+        x[rng.integers(lo, hi) :] += rng.choice([-1, 1]) * rng.uniform(0.3, 0.8)
     return x
 
 
 def autocorrelation(rng, c):
-    return _ar1(rng, CONTEXT, [-0.7, 0.0, 0.5, 0.95][c])
+    return _ar1(rng, CONTEXT, [-0.2, 0.0, 0.2, 0.4][c])
 
 
 def anomaly(rng, c):
     x = _ar1(rng, CONTEXT, 0.6)
     if c == 1:
         idx = rng.choice(CONTEXT, size=rng.integers(1, 5), replace=False)
-        x[idx] += rng.choice([-1, 1], size=len(idx)) * rng.uniform(6, 10, size=len(idx))
+        x[idx] += rng.choice([-1, 1], size=len(idx)) * rng.uniform(3, 4.5, size=len(idx))
     return x
 
 
@@ -112,7 +112,7 @@ def seasonal_long(rng, c):
     if c == 0:
         return noise
     period = [None, 24, 168][c] * rng.uniform(0.95, 1.05)
-    return noise + np.sin(2 * np.pi * t / period + rng.uniform(0, 2 * np.pi))
+    return noise + 0.2 * np.sin(2 * np.pi * t / period + rng.uniform(0, 2 * np.pi))
 
 
 TASKS = {
@@ -155,10 +155,18 @@ def build(out: Path, seed: int = 0, items: int = ITEMS_PER_TASK) -> Path:
 
 
 def raw_aucs(model: Path, data: Path) -> list[float]:
-    """Per-task AUC with anchors (0, 1), i.e. score == AUC."""
-    import evaluate
+    """Per-task AUC with anchors (0, 1), i.e. score == AUC.
 
-    result = evaluate.evaluate(str(model), str(data))
+    Runs the official evaluator in a separate process: onnxruntime-gpu's CUDA preload segfaults when
+    PyTorch is already loaded in the same process (seen on Oscar, exit 139).
+    """
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parent.parent
+    with tempfile.NamedTemporaryFile(suffix=".json") as out:
+        subprocess.run([sys.executable, str(root / "evaluate.py"), str(model), str(data), "--out", out.name], check=True)
+        result = json.loads(Path(out.name).read_text())
     return [result["tasks"][f"task{n}"]["auc"] for n in range(1, len(result["tasks"]) + 1)]
 
 
@@ -177,10 +185,14 @@ def calibrate(data: Path, reference: Path) -> list[dict]:
         floor = raw_aucs(untrained_model(Path(tmp) / "untrained.onnx"), data)
     ref = raw_aucs(reference, data)
     spec = json.loads((data / "tasks.json").read_text())
+    spec["version"] = "2.1"
     for task, f, r in zip(spec["tasks"], floor, ref):
         task["floor"], task["reference"] = round(f, 6), round(r, 6)
-        if r - f < 0.02:  # task the reference cannot beat random weights on: keep it but flag it
-            task["note"] = "reference within 0.02 AUC of floor; score is noisy"
+        if r - f < 0.02:
+            # (AUC - floor) / (reference - floor) is meaningless when the reference does not beat random
+            # weights; evaluate.py's 1e-6 guard would turn it into +/-1e5. Keep the task for its AUC only.
+            task["weight"] = 0.0
+            task["note"] = "reference does not beat the untrained floor by 0.02 AUC; weight 0, compare AUC"
     (data / "tasks.json").write_text(json.dumps(spec, indent=2) + "\n")
     return spec["tasks"]
 
