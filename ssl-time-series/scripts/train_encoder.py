@@ -27,8 +27,9 @@ def _save_checkpoint(
     config: dict,
     history: list[dict],
     step: int,
-) -> None:
+) -> Path:
     """Atomically save enough state to export or continue training."""
+    path = path.with_name(f"{path.stem}-step-{step:06d}{path.suffix}")
     checkpoint = {
         "step": step,
         "encoder": encoder.state_dict(),
@@ -46,6 +47,7 @@ def _save_checkpoint(
     temporary = path.with_name(path.name + ".tmp")
     torch.save(checkpoint, temporary)
     os.replace(temporary, path)
+    return path
 
 
 def _restore_rng(checkpoint: dict) -> None:
@@ -143,7 +145,7 @@ def train(args: argparse.Namespace) -> Path:
             history.append(row)
             print(json.dumps(row), flush=True)
         if args.checkpoint_every and step % args.checkpoint_every == 0:
-            _save_checkpoint(
+            saved_path = _save_checkpoint(
                 args.output,
                 encoder=encoder,
                 module=module,
@@ -152,8 +154,8 @@ def train(args: argparse.Namespace) -> Path:
                 history=history,
                 step=step,
             )
-            print(f"Saved checkpoint at step {step}: {args.output}", flush=True)
-    _save_checkpoint(
+            print(f"Saved checkpoint at step {step}: {saved_path}", flush=True)
+    final_path = _save_checkpoint(
         args.output,
         encoder=encoder,
         module=module,
@@ -162,8 +164,8 @@ def train(args: argparse.Namespace) -> Path:
         history=history,
         step=args.steps,
     )
-    print(f"Saved final checkpoint at step {args.steps}: {args.output}", flush=True)
-    return args.output
+    print(f"Saved final checkpoint at step {args.steps}: {final_path}", flush=True)
+    return final_path
 
 
 def main() -> None:
