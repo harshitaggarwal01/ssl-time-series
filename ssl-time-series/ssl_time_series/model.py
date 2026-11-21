@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .constants import CHANNELS, CONTEXT
-from .preprocessing import derived_channels, real_points
+from .preprocessing import derived_channels, feature_channel_count, real_points
 
 
 POOLINGS = ("mean", "mean_max_std", "mean_std")
@@ -28,6 +28,7 @@ class SeriesEncoder(nn.Module):
         pooling: str = "mean",
         stem: bool = False,
         real_only: bool = False,
+        feature_groups: tuple[str, ...] | list[str] = (),
     ):
         super().__init__()
         self.real_only = real_only  # normalize and pool over the series alone, not over its left padding
@@ -41,7 +42,8 @@ class SeriesEncoder(nn.Module):
         self.pooling = pooling
         self.patch_size = patch_size
         self.patch_count = CONTEXT // patch_size
-        self.patch = nn.Conv1d(3, embed_dim, kernel_size=patch_size, stride=patch_size, bias=True)
+        self.feature_groups = tuple(feature_groups)
+        self.patch = nn.Conv1d(feature_channel_count(self.feature_groups), embed_dim, kernel_size=patch_size, stride=patch_size, bias=True)
         self.stem = None
         if stem:
             self.stem = nn.ModuleList(
@@ -69,14 +71,14 @@ class SeriesEncoder(nn.Module):
         cannot leak into visible tokens.
         """
         batch = features.shape[0]
-        local = features.reshape(batch, 3, self.patch_count, self.patch_size).transpose(1, 2)
+        local = features[:, :3].reshape(batch, 3, self.patch_count, self.patch_size).transpose(1, 2)
         local = local.reshape(batch * self.patch_count, 3, self.patch_size)
         maps = torch.cat([F.gelu(conv(local)) for conv in self.stem], dim=1)
         pooled = torch.cat((maps.mean(dim=-1), maps.amax(dim=-1)), dim=1)
         return self.stem_project(pooled).reshape(batch, self.patch_count, self.embed_dim)
 
     def channels(self, x: torch.Tensor) -> torch.Tensor:
-        return derived_channels(x, real_points(x) if self.real_only else None)
+        return derived_channels(x, real_points(x) if self.real_only else None, self.feature_groups)
 
     def embed(self, x: torch.Tensor) -> torch.Tensor:
         features = self.channels(x)

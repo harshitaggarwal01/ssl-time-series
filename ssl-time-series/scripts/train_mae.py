@@ -70,6 +70,7 @@ def train(args: argparse.Namespace) -> Path:
         num_heads=args.heads,
         stem=args.stem,
         real_only=args.real_only,
+        feature_groups=args.feature_groups,
     )
     module = MaskedAutoencoder(
         encoder,
@@ -84,7 +85,9 @@ def train(args: argparse.Namespace) -> Path:
         crop_low=args.crop_low,
     ).to(device)
     if args.arch == "conv":  # --depth is the number of dilated blocks, --mask-span counts units of 16 points
-        encoder = ConvEncoder(embed_dim=args.embed_dim, hidden=args.hidden, depth=args.depth, real_only=args.real_only)
+        encoder = ConvEncoder(embed_dim=args.embed_dim, hidden=args.hidden, depth=args.depth, real_only=args.real_only,
+            feature_groups=args.feature_groups,
+        )
         module = ConvObjective(
             encoder, ratio=args.mask_ratio, span=args.mask_span, contrast=args.contrast, resize=args.view == "resize"
         ).to(device)
@@ -159,6 +162,11 @@ def main() -> None:
     parser.add_argument("--depth", type=int, default=4)
     parser.add_argument("--heads", type=int, default=5)
     parser.add_argument("--stem", action="store_true", help="add patch-local dilated convolutions to the tokens")
+    parser.add_argument(
+        "--feature-groups", nargs="*", default=[],
+        choices=("multiscale", "log_returns", "volatility", "momentum", "scale"),
+        help="Track 2 channels added to the input of either encoder",
+    )
     parser.add_argument("--real-only", action="store_true", help="normalize and pool over the series, not its padding")
     parser.add_argument("--mask-ratio", type=float, default=0.4)
     parser.add_argument("--mask-span", type=int, default=4, help="run length in patches; 1 is random, >= patch count is one block")

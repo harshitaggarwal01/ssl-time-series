@@ -12,7 +12,7 @@ from torch.nn import functional as F
 
 from .mae import crop_view, sample_mask
 from .model import POOLINGS
-from .preprocessing import derived_channels, real_points
+from .preprocessing import derived_channels, feature_channel_count, real_points
 
 STRIDE = 4  # points per position of the representation; full resolution does not fit a 12 GB GPU at batch 512
 MASK_UNIT = 16  # points per masking unit
@@ -32,7 +32,8 @@ class ConvEncoder(nn.Module):
     """[B, 1, T] raw windows -> [B, D] (mean over time) or [B, 3D] (mean, max and spread over time)."""
 
     def __init__(
-        self, embed_dim: int = 320, hidden: int = 96, depth: int = 10, pooling: str = "mean", real_only: bool = False
+        self, embed_dim: int = 320, hidden: int = 96, depth: int = 10, pooling: str = "mean", real_only: bool = False,
+        feature_groups: tuple[str, ...] | list[str] = (),
     ):
         super().__init__()
         if pooling not in POOLINGS:
@@ -40,7 +41,8 @@ class ConvEncoder(nn.Module):
         self.embed_dim = embed_dim
         self.pooling = pooling
         self.real_only = real_only  # normalize and pool over the series alone, not over its left padding
-        self.input = nn.Conv1d(3, hidden, kernel_size=STRIDE, stride=STRIDE)
+        self.feature_groups = tuple(feature_groups)  # Track 2 channels, appended after the 3 base ones
+        self.input = nn.Conv1d(feature_channel_count(self.feature_groups), hidden, kernel_size=STRIDE, stride=STRIDE)
         self.blocks = nn.ModuleList(Block(hidden, 2**index) for index in range(depth))
         self.output = nn.Conv1d(hidden, embed_dim, kernel_size=1)
 
@@ -54,7 +56,7 @@ class ConvEncoder(nn.Module):
         return self.output(hidden)
 
     def channels(self, x: torch.Tensor) -> torch.Tensor:
-        return derived_channels(x, real_points(x) if self.real_only else None)
+        return derived_channels(x, real_points(x) if self.real_only else None, self.feature_groups)
 
     def pooled(self, features: torch.Tensor, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Mean, maximum and spread of ``features`` over time, [B, D] each."""

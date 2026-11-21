@@ -37,6 +37,7 @@ def main() -> None:
         pooling=args.pooling,
         stem=bool(config.get("stem", False)),
         real_only=bool(config.get("real_only", False)),
+        feature_groups=config.get("feature_groups", []),
     )
     if config.get("arch") == "conv":
         encoder = ConvEncoder(
@@ -45,6 +46,7 @@ def main() -> None:
             depth=int(config["depth"]),
             pooling=args.pooling,
             real_only=bool(config.get("real_only", False)),
+            feature_groups=config.get("feature_groups", []),
         )
     encoder.load_state_dict(checkpoint["encoder"])
     path = export_encoder(HybridEncoder(encoder, FixedFeatures()) if args.fixed else encoder, args.output)

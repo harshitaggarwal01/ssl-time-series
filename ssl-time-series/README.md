@@ -19,7 +19,7 @@ uv run python -m scripts.train_encoder \
   --config configs/main.json \
   --output outputs/main.pt
 uv run python -m scripts.export_model \
-  --checkpoint outputs/main.pt \
+  --checkpoint outputs/main/step-020000.pt \
   --output outputs/model.onnx
 uv run test_submission.py outputs/model.onnx
 uv run python -m scripts.proxy_evaluate outputs/model.onnx
@@ -28,6 +28,29 @@ uv run python -m scripts.proxy_evaluate outputs/model.onnx
 The corpus is large and should remain outside Git. `corpus_loader.py` memory
 maps it; the training sampler never loads the concatenated values array into
 RAM.
+
+Training writes a resumable checkpoint every 500 steps by default and once
+more at completion. Each run gets its own directory, with files named by step,
+such as `outputs/main/step-000500.pt`. Set `--checkpoint-every` to change the interval,
+or `0` to disable periodic saves. To continue from step 2,000 and train through
+step 4,000, reuse the same architecture, feature groups, and seed:
+
+```bash
+uv run python -m scripts.train_encoder \
+  --corpus corpus \
+  --config configs/main.json \
+  --steps 4000 \
+  --resume outputs/main/step-002000.pt \
+  --output outputs/main-continued.pt
+```
+
+The checkpoint restores the encoder, training heads, optimizer, loss history,
+and random-number-generator state. The data-loader shuffle position is not
+stored, so the resumed run may see windows in a different order.
+Use a new `--output` prefix when branching from an earlier checkpoint to keep
+the new run's step files separate from checkpoints already written.
+Training output is shown in the terminal and appended to `train.log` in the
+run folder by default; set `--log-file` to choose another path.
 
 For a complete Google Colab workflow, open
 [`notebooks/baseline_colab.ipynb`](notebooks/baseline_colab.ipynb). It clones
