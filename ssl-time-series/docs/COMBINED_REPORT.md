@@ -97,3 +97,23 @@ Next probe: `c-conv-s1-nofixed` (`slurm/leaderboard_probes.sbatch`), the same co
 features (640 dimensions, 2.85 MiB). Suite 1.382, UCR 0.911 / 0.910. It isolates whether the 1,925 untrained-feature
 dimensions hurt the hidden tasks, since the evaluator standardizes every dimension before the ridge probe. The
 same job builds `main-mm` (main + momentum + multiscale; suite 1.284, UCR 0.862 / 0.856) as a reserve.
+
+## Window statistics block (`--stats`, 21 Nov)
+
+`ssl_time_series/stats.py`: 49 untrained statistics (level and scale, real length, integer / non-positive share,
+distribution shape, trend, autocorrelation, and GS Quant-style indicators: RSI, Bollinger, drawdown, streaks,
+rolling volatility, percentile rank). Exported from existing checkpoints by `slurm/export_candidates.sbatch`; all
+pass `test_submission.py`.
+
+| model | dims | suite | UCR first | UCR held-out | ONNX |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| t3-conv (leaderboard 1.045) | 1925 | 1.314 | 0.932 | 0.920 | 6.65 MiB |
+| c-conv-s1-nofixed | 640 | 1.382 | 0.911 | 0.910 | 2.85 MiB |
+| conv-stats | 689 | 1.377 | 0.918 | 0.915 | 3.82 MiB |
+| **conv-fixed-stats** | 1974 | 1.315 | **0.934** | **0.923** | 7.86 MiB |
+| conv2-stats (two conv encoders) | 1329 | 1.376 | 0.921 | 0.915 | 6.69 MiB |
+| conv-mainmm-stats (conv + transformer) | 1329 | 1.358 | 0.915 | 0.913 | 18.15 MiB |
+
+Both proxies remove scale information by design (random rescaling; mostly z-normalized UCR), so they cannot reward
+the scale part of the block. Even so it adds 0.005 to 0.007 UCR AUC to either base model and 0.05 to 0.07 AUC on
+the anomaly task. Its value on the hidden tasks has to come from the leaderboard.
