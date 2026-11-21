@@ -75,3 +75,25 @@ Track 2 confirmation on the 2k-step transformer (suite score, seeds 0/1/2):
 Final candidate: **the Track 3 conv model** (`models/candidate-conv.onnx` = `t3-conv`; `c-conv-s1` is
 equivalent within noise). Do not add the Track 2 channels to it. Keep the Track 2 result for the presentation as
 evidence that finance-style channels help a trained encoder, and that untrained features subsume them.
+
+## Leaderboard check (21 Nov 2026)
+
+`t3-conv` (uploaded 20 Nov, 21:54) scored **1.045** on the leaderboard, rank 8 of 17; the top score is 1.372.
+Both proxies rated it far above the official example (suite 1.31, UCR 0.93 vs 0.80), so **neither proxy
+predicts the hidden tasks**. From here on, only leaderboard scores count as evidence.
+
+Hidden task weights, solved exactly from the 17 leaderboard rows (fit error 4e-7):
+
+| task | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| weight | 0.15 | 0.05 | 0.05 | 0.05 | 0.15 | 0.15 | 0.075 | 0.075 | 0.075 | 0.075 | 0.05 | 0.05 |
+| t3-conv | 1.196 | 1.188 | 1.094 | 1.417 | 1.036 | **0.623** | 1.260 | 1.003 | 1.047 | 0.994 | 1.177 | **0.996** |
+| top-5 mean | 1.341 | 1.278 | 1.155 | 1.693 | 1.138 | 1.247 | 1.362 | 1.114 | 1.068 | 1.013 | 1.201 | 1.854 |
+
+We trail the top-5 mean by 0.215. Task 6 accounts for 0.094 of that and task 12 for 0.043. Task 6 swings from
+-1.09 to 1.46 across teams, which suggests the untrained floor sits close to the reference there.
+
+Next probe: `c-conv-s1-nofixed` (`slurm/leaderboard_probes.sbatch`), the same conv encoder without the untrained
+features (640 dimensions, 2.85 MiB). Suite 1.382, UCR 0.911 / 0.910. It isolates whether the 1,925 untrained-feature
+dimensions hurt the hidden tasks, since the evaluator standardizes every dimension before the ridge probe. The
+same job builds `main-mm` (main + momentum + multiscale; suite 1.284, UCR 0.862 / 0.856) as a reserve.
