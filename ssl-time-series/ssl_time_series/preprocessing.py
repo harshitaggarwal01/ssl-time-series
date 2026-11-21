@@ -18,9 +18,16 @@ FEATURE_GROUP_CHANNELS = {
 
 
 def sanitize(x: torch.Tensor) -> torch.Tensor:
-    """Replace non-finite values without changing finite values."""
+    """Replace non-finite values with the mean of the window's finite values.
+
+    Filling with 0 would turn a NaN gap in a series at level 1000 into a spike of size 1000.
+    A window with no finite value becomes all zeros.
+    """
     finite = torch.isfinite(x)
-    return torch.where(finite, x, torch.zeros_like(x))
+    zeroed = torch.where(finite, x, torch.zeros_like(x))
+    count = finite.to(x.dtype).sum(dim=-1, keepdim=True).clamp_min(1.0)
+    fill = zeroed.sum(dim=-1, keepdim=True) / count
+    return torch.where(finite, x, fill)
 
 
 def normalize(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
@@ -82,6 +89,7 @@ def derived_channels(
     """
     if x.ndim != 3 or x.shape[1] != CHANNELS or x.shape[2] != CONTEXT:
         raise ValueError(f"expected [B, {CHANNELS}, {CONTEXT}], got {tuple(x.shape)}")
+    x = sanitize(x)  # fill gaps first, so differences do not see them
     scale = normalize if real is None else (lambda values: normalize_over(values, real))
     level = scale(x)
     difference = x[..., 1:] - x[..., :-1]
