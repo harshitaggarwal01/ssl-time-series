@@ -32,3 +32,16 @@ def test_fixed_subset_matches_full_columns():
     assert torch.allclose(out[:, 64:128], full[:, 448:512])
     every = FixedSubset(["spectrum", "ppv", "hydra", "scale"])
     assert every.dim == full.shape[1] and torch.allclose(every(x), full)
+
+
+def test_profile_finite_and_positional():
+    from ssl_time_series.stats import WindowProfile
+
+    block = WindowProfile()
+    early, late = torch.zeros(1, 1, 1024), torch.zeros(1, 1, 1024)
+    early[..., 100:140] = 1.0
+    late[..., 900:940] = 1.0
+    x = torch.cat((early, late, torch.full((1, 1, 1024), 7.0), torch.randn(61, 1, 1024) * 1e6), dim=0)
+    out = block(x)
+    assert out.shape == (64, block.dim) and torch.isfinite(out).all()
+    assert out[0, :32].argmax() == 100 // 32 and out[1, :32].argmax() == 900 // 32

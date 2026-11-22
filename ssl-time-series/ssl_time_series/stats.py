@@ -149,6 +149,39 @@ class WindowStats(nn.Module):
         return torch.nan_to_num(out, nan=0.0, posinf=50.0, neginf=-50.0).clamp(-50.0, 50.0)
 
 
+class WindowProfile(nn.Module):
+    """[B, 1, T] raw windows -> [B, 48]: where things happen inside the window (no training).
+
+    Mean and std pooling over time cannot say *where* a pattern sits, but in aligned data (one heartbeat, one
+    gesture, one day per series) the position is often the class. This keeps it, coarsely: the piecewise aggregate
+    approximation (PAA) of the normalized series in 32 segments, and the spread of the level and the size of the
+    steps in 8 segments. All normalized over the real part; the padding contributes zeros.
+    """
+
+    dim = 48
+    SEGMENTS, COARSE = 32, 8
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        raw = sanitize(x)[:, 0]
+        batch, length = raw.shape
+        moved = (raw != raw[:, :1]).float().cumsum(dim=1) > 0
+        real = (torch.cat((moved[:, 1:], torch.ones_like(moved[:, :1])), dim=1) | moved).float()
+        n = real.sum(dim=1, keepdim=True).clamp_min(1.0)
+        mean = (raw * real).sum(dim=1, keepdim=True) / n
+        centered = (raw - mean) * real
+        std = torch.sqrt((centered * centered).sum(dim=1, keepdim=True) / n).clamp_min(EPS)
+        z = centered / std
+        step = torch.cat((torch.zeros_like(raw[:, :1]), raw[:, 1:] - raw[:, :-1]), dim=1).abs() / std
+        step = step * real * _shift(real, 1)
+        step = step / (step.sum(dim=1, keepdim=True) / n).clamp_min(EPS)  # relative to the window's typical step
+        paa = z.reshape(batch, self.SEGMENTS, length // self.SEGMENTS).mean(dim=-1)
+        coarse = z.reshape(batch, self.COARSE, length // self.COARSE)
+        spread = torch.sqrt((coarse * coarse).mean(dim=-1))
+        steps = torch.log1p(step.reshape(batch, self.COARSE, length // self.COARSE).mean(dim=-1))
+        out = torch.cat((paa, spread, steps), dim=1)
+        return torch.nan_to_num(out, nan=0.0, posinf=50.0, neginf=-50.0).clamp(-50.0, 50.0)
+
+
 class ConcatEncoder(nn.Module):
     """Concatenate the outputs of several encoders / feature blocks on the same input."""
 
