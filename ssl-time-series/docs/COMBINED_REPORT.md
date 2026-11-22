@@ -159,3 +159,15 @@ Plan: Sunday upload = the combination with the fewest added dimensions that carr
 (`conv-stats-prof`, 737 dims). The task clusters separate the blocks in the per-task scores (stats -> 11/12,
 profile -> 5/6/10). Monday upload = Sunday's file plus whatever its per-task scores support, or `nofixed` back if
 Sunday is lower than 1.088.
+
+Combined candidates (`slurm/export_combo.sbatch`, job 9474593; all pass `test_submission.py`; UCR column = evaluator
+score on the two sets):
+
+| model | dims | suite | UCR first | UCR held-out |
+| --- | ---: | ---: | ---: | ---: |
+| conv-stats-prof (**Sunday upload**) | 737 | 1.360 | 0.845 | 0.832 |
+| conv-max-stats | 1009 | 1.372 | 0.840 | 0.834 |
+| conv-max-stats-prof | 1057 | 1.367 | 0.843 | 0.835 |
+| conv-spec-stats-prof | 870 | 1.351 | 0.847 | 0.835 |
+
+The proxies cannot separate them (all within 0.02), so the choice follows the plan above.
