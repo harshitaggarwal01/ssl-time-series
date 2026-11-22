@@ -133,3 +133,29 @@ reproduce the overall score exactly.
 The untrained features are not uniformly bad. They cost tasks 1, 3, 4 and 12 a lot, and help tasks 5, 6, 9, 10 and 11 a
 little. Task 6 stays the weakest at 0.54 either way, so it needs something neither block has. Next upload:
 `conv-stats` (nofixed + window statistics), which isolates the statistics block.
+
+## Strategy for the last two evaluations (22 Nov)
+
+Facts from the public leaderboard data (`docs/leaderboard.json` in the challenge repo and its 19 daily revisions):
+
+- Only the latest upload per participant is evaluated, once a day at about 04:00-05:00 UTC. Before the
+  presentation that leaves two evaluations: Sunday night and Monday night.
+- We are now rank 10 (1.088). To pass 1.372 we need about +0.14 on task 6, +0.06 on task 5 and +0.05 on task 12;
+  on tasks 1, 3 and 4 we are already at or above the leader.
+- Across 44 evaluated submissions, the tasks fall into clusters: {5, 6, 10, 7} (5-6 correlation 0.82), {8, 9}
+  (0.93), {11, 12} (0.70), {3, 4} (0.64), with 1 and 2 general.
+
+Strategies and the evidence for each:
+
+| # | strategy | targets | source | status |
+| --- | --- | --- | --- | --- |
+| 1 | fewer, better dimensions (the probe standardizes all of them; alpha <= 1000) | 1, 3, 4 | leaderboard: dropping 1,285 untrained dims gave +0.043 | done (`nofixed`) |
+| 2 | level, scale and length statistics plus GS Quant indicators | 11, 12, 6 | example and floor normalize per series, so scale is free signal | `--stats` |
+| 3 | position profile (PAA, segment spread and step size) | 5, 6, 10 | untrained floor close to reference on task 6, typical of aligned data | `--profile` |
+| 4 | max pooling over time (TS2Vec instance readout) | 5, 6, 10 | TS2Vec; keeps short events that mean pooling blurs | `mean_max_std` |
+| 5 | only the spectrum part of the untrained features | 5, 6, 10 | untrained features helped 5, 6, 10 slightly; the kernels are 90% of their size | `--fixed-parts` |
+
+Plan: Sunday upload = the combination with the fewest added dimensions that carries 2 and 3
+(`conv-stats-prof`, 737 dims). The task clusters separate the blocks in the per-task scores (stats -> 11/12,
+profile -> 5/6/10). Monday upload = Sunday's file plus whatever its per-task scores support, or `nofixed` back if
+Sunday is lower than 1.088.
