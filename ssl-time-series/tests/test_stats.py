@@ -45,3 +45,16 @@ def test_profile_finite_and_positional():
     out = block(x)
     assert out.shape == (64, block.dim) and torch.isfinite(out).all()
     assert out[0, :32].argmax() == 100 // 32 and out[1, :32].argmax() == 900 // 32
+
+
+def test_patch_profile_finite_and_positional():
+    from ssl_time_series.stats import PatchProfile
+
+    block = PatchProfile(32)
+    bumpy = torch.zeros(1, 1, 1024)
+    bumpy[..., 1:] = 0.01  # real from the start
+    bumpy[..., 610:630] += torch.randn(20)
+    x = torch.cat((bumpy, torch.full((1, 1, 1024), 3.0), torch.randn(62, 1, 1024) * 1e7), dim=0)
+    out = block(x)
+    assert out.shape == (64, 96) and torch.isfinite(out).all()
+    assert out[0, 32:64].argmax() == 610 // 32

@@ -20,7 +20,7 @@ from ssl_time_series.conv import ConvEncoder
 from ssl_time_series.export import export_encoder
 from ssl_time_series.fixed import PARTS, FixedFeatures, FixedSubset
 from ssl_time_series.model import POOLINGS, SeriesEncoder
-from ssl_time_series.stats import ConcatEncoder, WindowProfile, WindowStats
+from ssl_time_series.stats import ConcatEncoder, PatchProfile, WindowProfile, WindowStats
 
 MAX_BYTES = 20 * 1024 * 1024
 
@@ -63,6 +63,8 @@ def main() -> None:
                         help="append only these parts of the untrained features (instead of --fixed)")
     parser.add_argument("--stats", action="store_true", help="append the window statistics block")
     parser.add_argument("--profile", action="store_true", help="append the position profile block (PAA)")
+    parser.add_argument("--patch-profile", type=int, default=0, metavar="SEGMENTS",
+                        help="append mean, spread and step size of each of SEGMENTS segments (0 = off)")
     args = parser.parse_args()
     poolings = args.pooling * len(args.checkpoint) if len(args.pooling) == 1 else args.pooling
     if len(poolings) != len(args.checkpoint):
@@ -72,6 +74,7 @@ def main() -> None:
         parser.error("give --fixed or --fixed-parts, not both")
     fixed = [FixedFeatures()] if args.fixed else [FixedSubset(args.fixed_parts)] if args.fixed_parts else []
     parts = encoders + fixed + ([WindowStats()] if args.stats else []) + ([WindowProfile()] if args.profile else [])
+    parts += [PatchProfile(args.patch_profile)] if args.patch_profile else []
     model = parts[0] if len(parts) == 1 else ConcatEncoder(*parts)
     with torch.no_grad():
         dim = model.eval()(torch.randn(64, 1, 1024)).shape[1]

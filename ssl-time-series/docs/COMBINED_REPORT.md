@@ -171,3 +171,13 @@ score on the two sets):
 | conv-spec-stats-prof | 870 | 1.351 | 0.847 | 0.835 |
 
 The proxies cannot separate them (all within 0.02), so the choice follows the plan above.
+
+## Leaderboard: conv-stats-prof (22 Nov)
+
+`conv-stats-prof` (uploaded 22 Nov, 00:25 EST) scored **1.187, rank 6** (from 1.088). Per task against `nofixed`:
+task 12 +0.70 (1.78; leader 2.14), task 4 +0.29, task 6 +0.15, task 3 +0.13, task 8 +0.11, task 11 +0.11; task 5
+-0.07, task 9 -0.04. The statistics block delivers the scale signal the example model removes. The remaining gap to
+first place (0.185) is almost all task 6 (0.117) and task 5 (0.074); on tasks 1, 3 and 4 we lead the board.
+
+Next: `PatchProfile` (`--patch-profile N`), mean, spread and step size of each of N segments, built by
+`slurm/export_patch.sbatch`.

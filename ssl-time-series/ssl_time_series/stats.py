@@ -182,6 +182,40 @@ class WindowProfile(nn.Module):
         return torch.nan_to_num(out, nan=0.0, posinf=50.0, neginf=-50.0).clamp(-50.0, 50.0)
 
 
+class PatchProfile(nn.Module):
+    """[B, 1, T] raw windows -> [B, 3 * segments]: per segment, the mean, spread and step size of the normalized
+    series, in order of position.
+
+    A richer version of WindowProfile. On the leaderboard (22 Nov) the 48-dim profile moved task 6 from 0.54 to
+    0.68; task 6 is where an untrained ViT (patches with position embeddings) almost matches the trained example,
+    so it likely needs to know what each part of the window looks like, not only that a pattern occurs somewhere.
+    """
+
+    def __init__(self, segments: int = 32):
+        super().__init__()
+        self.segments = segments
+        self.dim = 3 * segments
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        raw = sanitize(x)[:, 0]
+        batch, length = raw.shape
+        moved = (raw != raw[:, :1]).float().cumsum(dim=1) > 0
+        real = (torch.cat((moved[:, 1:], torch.ones_like(moved[:, :1])), dim=1) | moved).float()
+        n = real.sum(dim=1, keepdim=True).clamp_min(1.0)
+        mean = (raw * real).sum(dim=1, keepdim=True) / n
+        centered = (raw - mean) * real
+        std = torch.sqrt((centered * centered).sum(dim=1, keepdim=True) / n).clamp_min(EPS)
+        z = (centered / std).reshape(batch, self.segments, length // self.segments)
+        step = torch.cat((torch.zeros_like(raw[:, :1]), raw[:, 1:] - raw[:, :-1]), dim=1).abs() / std
+        step = step * real * _shift(real, 1)
+        step = step / (step.sum(dim=1, keepdim=True) / n).clamp_min(EPS)
+        local_mean = z.mean(dim=-1)
+        spread = torch.sqrt(F.relu((z * z).mean(dim=-1) - local_mean * local_mean))
+        steps = torch.log1p(step.reshape(batch, self.segments, -1).mean(dim=-1))
+        out = torch.cat((local_mean, spread, steps), dim=1)
+        return torch.nan_to_num(out, nan=0.0, posinf=50.0, neginf=-50.0).clamp(-50.0, 50.0)
+
+
 class ConcatEncoder(nn.Module):
     """Concatenate the outputs of several encoders / feature blocks on the same input."""
 
