@@ -181,3 +181,15 @@ first place (0.185) is almost all task 6 (0.117) and task 5 (0.074); on tasks 1,
 
 Next: `PatchProfile` (`--patch-profile N`), mean, spread and step size of each of N segments, built by
 `slurm/export_patch.sbatch`.
+
+Patch-profile candidates (job 9498646; all pass `test_submission.py`):
+
+| model | dims | suite | UCR first | UCR held-out |
+| --- | ---: | ---: | ---: | ---: |
+| conv-stats-patch (**Sunday-night upload**) | 785 | 1.358 | 0.845 | 0.830 |
+| conv-stats-patch64 | 881 | 1.349 | 0.837 | 0.832 |
+| conv-stats-patch-spec | 918 | 1.348 | 0.850 | 0.832 |
+| conv-max-stats-patch | 1105 | 1.363 | 0.843 | 0.835 |
+
+Again flat on the proxies. `conv-stats-patch` changes one thing against the 1.187 model (the position block), so its
+task 5 / 6 scores answer the question directly.
