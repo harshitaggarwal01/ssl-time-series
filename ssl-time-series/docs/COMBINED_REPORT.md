@@ -117,3 +117,19 @@ pass `test_submission.py`.
 Both proxies remove scale information by design (random rescaling; mostly z-normalized UCR), so they cannot reward
 the scale part of the block. Even so it adds 0.005 to 0.007 UCR AUC to either base model and 0.05 to 0.07 AUC on
 the anomaly task. Its value on the hidden tasks has to come from the leaderboard.
+
+## Leaderboard probe: untrained features off (22 Nov)
+
+`c-conv-s1-nofixed` (uploaded 21 Nov, 14:33) scored **1.088**, up from 1.045 for `t3-conv`. The leaderboard lists
+task columns in string order (task1, task10, task11, task12, task2, ...); with the weights above, the columns
+reproduce the overall score exactly.
+
+| task (weight) | 1 (.15) | 2 (.05) | 3 (.05) | 4 (.05) | 5 (.15) | 6 (.15) | 7 (.075) | 8 (.075) | 9 (.075) | 10 (.075) | 11 (.05) | 12 (.05) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| t3-conv (with untrained) | 1.196 | 1.188 | 1.094 | 1.417 | 1.036 | 0.623 | 1.260 | 1.003 | 1.047 | 0.994 | 1.177 | 0.996 |
+| nofixed | **1.366** | 1.212 | **1.645** | **1.902** | 0.970 | 0.537 | 1.253 | 1.005 | 0.971 | 0.924 | 1.070 | 1.083 |
+| change | +0.170 | +0.024 | +0.551 | +0.485 | -0.066 | -0.086 | -0.007 | +0.002 | -0.076 | -0.070 | -0.107 | +0.087 |
+
+The untrained features are not uniformly bad. They cost tasks 1, 3, 4 and 12 a lot, and help tasks 5, 6, 9, 10 and 11 a
+little. Task 6 stays the weakest at 0.54 either way, so it needs something neither block has. Next upload:
+`conv-stats` (nofixed + window statistics), which isolates the statistics block.
