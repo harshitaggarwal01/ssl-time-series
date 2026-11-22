@@ -18,3 +18,17 @@ def test_concat_encoder_stacks_parts():
     stats = WindowStats()
     out = ConcatEncoder(stats, stats)(torch.randn(4, 1, 1024))
     assert out.shape == (4, 2 * WindowStats.dim)
+
+
+def test_fixed_subset_matches_full_columns():
+    from ssl_time_series.fixed import FixedFeatures, FixedSubset
+
+    x = torch.randn(4, 1, 1024).cumsum(-1)
+    full = FixedFeatures()(x)
+    spectrum = FixedSubset(["spectrum", "scale"])
+    assert spectrum.dim == 2 * 64 + 5
+    out = spectrum(x)
+    assert torch.allclose(out[:, :64], full[:, :64]) and torch.allclose(out[:, -5:], full[:, -5:])
+    assert torch.allclose(out[:, 64:128], full[:, 448:512])
+    every = FixedSubset(["spectrum", "ppv", "hydra", "scale"])
+    assert every.dim == full.shape[1] and torch.allclose(every(x), full)

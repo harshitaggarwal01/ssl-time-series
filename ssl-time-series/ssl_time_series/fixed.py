@@ -85,6 +85,41 @@ class FixedFeatures(nn.Module):
         return torch.cat(features, dim=1)
 
 
+PARTS = ("spectrum", "ppv", "hydra", "scale")
+
+
+class FixedSubset(nn.Module):
+    """Only some parts of FixedFeatures: ``spectrum`` (bands per signal), ``ppv`` (MiniRocket share of positive
+    responses), ``hydra`` (competing-kernel counts) and ``scale`` (5 raw-scale statistics).
+
+    Why: the probe standardizes every dimension, so a block that helps a few hidden tasks can still cost others by
+    sheer size (leaderboard, 22 Nov: the full 1,285 dimensions cost tasks 1, 3, 4 and 12).
+    """
+
+    def __init__(self, parts, bands: int = 64, kernels: int = 384, seed: int = 0):
+        super().__init__()
+        unknown = set(parts) - set(PARTS)
+        if unknown or not parts:
+            raise ValueError(f"parts must be a non-empty subset of {PARTS}")
+        self.fixed = FixedFeatures(bands, kernels, seed)
+        columns = []
+        for signal in range(2):  # level, then first difference
+            start = signal * (bands + kernels)
+            if "spectrum" in parts:
+                columns += range(start, start + bands)
+            if "ppv" in parts:
+                columns += range(start + bands, start + bands + kernels)
+        if "hydra" in parts:
+            columns += range(2 * (bands + kernels), 2 * (bands + kernels) + kernels)
+        if "scale" in parts:
+            columns += range(self.fixed.dim - 5, self.fixed.dim)
+        self.dim = len(columns)
+        self.register_buffer("columns", torch.tensor(sorted(columns), dtype=torch.long))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.fixed(x).index_select(1, self.columns)
+
+
 class HybridEncoder(nn.Module):
     """The exported model: the trained encoder's embedding followed by the untrained features."""
 

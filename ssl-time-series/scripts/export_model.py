@@ -18,7 +18,7 @@ if hasattr(torch.backends, "mha") and hasattr(torch.backends.mha, "set_fastpath_
 
 from ssl_time_series.conv import ConvEncoder
 from ssl_time_series.export import export_encoder
-from ssl_time_series.fixed import FixedFeatures
+from ssl_time_series.fixed import PARTS, FixedFeatures, FixedSubset
 from ssl_time_series.model import POOLINGS, SeriesEncoder
 from ssl_time_series.stats import ConcatEncoder, WindowStats
 
@@ -59,13 +59,18 @@ def main() -> None:
     parser.add_argument("--pooling", choices=POOLINGS, nargs="+", default=["mean"],
                         help="how tokens become the embedding; one value, or one per checkpoint")
     parser.add_argument("--fixed", action="store_true", help="append the untrained features to the embedding")
+    parser.add_argument("--fixed-parts", choices=PARTS, nargs="+",
+                        help="append only these parts of the untrained features (instead of --fixed)")
     parser.add_argument("--stats", action="store_true", help="append the window statistics block")
     args = parser.parse_args()
     poolings = args.pooling * len(args.checkpoint) if len(args.pooling) == 1 else args.pooling
     if len(poolings) != len(args.checkpoint):
         parser.error("give one --pooling, or one per --checkpoint")
     encoders = [load_encoder(path, pooling) for path, pooling in zip(args.checkpoint, poolings)]
-    parts = encoders + ([FixedFeatures()] if args.fixed else []) + ([WindowStats()] if args.stats else [])
+    if args.fixed and args.fixed_parts:
+        parser.error("give --fixed or --fixed-parts, not both")
+    fixed = [FixedFeatures()] if args.fixed else [FixedSubset(args.fixed_parts)] if args.fixed_parts else []
+    parts = encoders + fixed + ([WindowStats()] if args.stats else [])
     model = parts[0] if len(parts) == 1 else ConcatEncoder(*parts)
     with torch.no_grad():
         dim = model.eval()(torch.randn(64, 1, 1024)).shape[1]
