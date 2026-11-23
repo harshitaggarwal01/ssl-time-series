@@ -10,6 +10,7 @@
 #SBATCH --job-name=ssl-contrast
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
+#SBATCH --constraint=ampere|lovelace
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=04:00:00
@@ -23,10 +24,14 @@ SUBMIT_FLAGS="${SUBMIT_FLAGS:---pooling mean_std --stats --profile}"
 cd "$CODE"; mkdir -p "$OUT/eval/ucr-first" "$OUT/eval/ucr-held_out"
 echo "$NAME seed=$SEED steps=$STEPS extra=${EXTRA:-} submit_flags=$SUBMIT_FLAGS commit=$(git rev-parse --short HEAD)"
 nvidia-smi --query-gpu=name --format=csv,noheader
+echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
+# train_mae silently falls back to the CPU (15x+ slower) when PyTorch sees no GPU; fail fast instead.
+"$PY" -c "import sys, torch; ok = torch.cuda.is_available(); print('torch', torch.__version__, 'cuda', torch.version.cuda, 'available', ok, torch.cuda.get_device_name(0) if ok else ''); sys.exit(0 if ok else 1)" \
+    || { echo "NO GPU VISIBLE TO PYTORCH on $(hostname); stopping"; exit 1; }
 start=$(date +%s)
 "$PY" -m scripts.train_mae --corpus "$DATA/corpus" --output "$OUT/$NAME.pt" \
     --arch conv --depth 8 --real-only --contrast 1.0 --view crop \
-    --steps "$STEPS" --workers "${SLURM_CPUS_PER_TASK:-8}" --log-every 2000 --seed "$SEED" ${EXTRA:-}
+    --steps "$STEPS" --workers "${SLURM_CPUS_PER_TASK:-8}" --log-every 500 --seed "$SEED" ${EXTRA:-}
 echo "train_seconds=$(( $(date +%s) - start ))"
 export_one() {  # NAME then export_model flags
   local N=$1; shift

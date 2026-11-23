@@ -126,7 +126,7 @@ def train(args: argparse.Namespace) -> Path:
         schedule.step()
         if module.teacher is not None:  # the momentum rises linearly to 1 over the run
             module.update_teacher(args.teacher_momentum + (1 - args.teacher_momentum) * step / args.steps)
-        recent.append({name: float(value) for name, value in parts.items()})
+        recent.append({name: float(value.detach()) for name, value in parts.items()})
         if step == 1 or step % args.log_every == 0 or step == args.steps:
             row = {"step": step, **{name: float(np.mean([r[name] for r in recent])) for name in recent[0]}}
             row["seconds"] = round(time.time() - started, 1)
