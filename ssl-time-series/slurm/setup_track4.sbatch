@@ -1,13 +1,14 @@
 #!/bin/bash
-# One-time setup for Track 4 in your own checkout (CPU job): Python env, corpus, proxy suite, UCR sets.
+# One-time setup for Track 4 in your own checkout (GPU job: evaluate.py with onnxruntime-gpu crashes on CPU-only nodes): Python env, corpus, proxy suite, UCR sets.
 #   mkdir -p logs && sbatch slurm/setup_track4.sbatch
 #   CORPUS_SRC=/path/to/someone/elses/corpus sbatch slurm/setup_track4.sbatch   # link an existing copy instead
 # Afterwards, train with:  bash slurm/contrastive_variants.sh   (DATA defaults to this checkout)
 #SBATCH --job-name=ssl-setup
-#SBATCH --partition=batch
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
-#SBATCH --time=03:00:00
+#SBATCH --time=02:00:00
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 PROJECT="${SLURM_SUBMIT_DIR:?submit from ssl-time-series/ (the folder with pyproject.toml)}"
@@ -29,7 +30,12 @@ ls -lhL corpus/corpus.npz
 wait "$SYNC_PID" || { cat outputs/uv_sync.log; exit 1; }
 PY=.venv/bin/python
 
-[[ -f outputs/proxy_suite/tasks.json ]] || time "$PY" -m scripts.build_proxy_suite --out outputs/proxy_suite
+nvidia-smi --query-gpu=name --format=csv,noheader
+if [[ ! -f outputs/proxy_suite/.calibrated ]]; then  # rebuild a suite whose calibration did not finish
+  rm -rf outputs/proxy_suite
+  time "$PY" -m scripts.build_proxy_suite --out outputs/proxy_suite
+  touch outputs/proxy_suite/.calibrated
+fi
 [[ -f outputs/ucr/first/tasks.json ]] || "$PY" -m scripts.proxy_ucr --out outputs/ucr/first --cache outputs/ucr/raw
 [[ -f outputs/ucr/held_out/tasks.json ]] || "$PY" -m scripts.proxy_ucr --out outputs/ucr/held_out --cache outputs/ucr/raw --held-out
 ls outputs/proxy_suite outputs/ucr/first outputs/ucr/held_out | head -40
