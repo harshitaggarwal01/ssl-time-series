@@ -13,11 +13,11 @@ import os
 import sys
 from pathlib import Path
 
-REFERENCES = {  # name -> leaderboard score where known
+REFERENCES = {  # name -> leaderboard score where known (team outputs; "-" if not in your DATA)
     "c-conv-s1-nofixed": 1.088,  # recon + InfoNCE, encoder only
     "conv-stats-prof": 1.187,  # recon + InfoNCE + stats + profile
 }
-VARIANTS = ("ct-infonce", "ct-aug", "ct-ts2vec")
+VARIANTS = ("ct-ref", "ct-infonce", "ct-aug", "ct-ts2vec")
 
 
 def read(path: Path):

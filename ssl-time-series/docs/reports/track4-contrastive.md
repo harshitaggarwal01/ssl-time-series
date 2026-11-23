@@ -19,8 +19,9 @@ reconstruction loss, and 40% span masking stays on as an augmentation. Only the 
 | `ct-aug` | as above + scale-aware jitter (5% of window std), magnitude warp (0.2), crops 50-100% | `--reconstruction 0 --jitter 0.05 --warp 0.2 --crop-low 0.5` |
 | `ct-ts2vec` | TS2Vec hierarchical instance + temporal contrast on two aligned prefix-dropped views | `--reconstruction 0 --objective hierarchical --crop-low 0.5` |
 
-References (already trained and scored by the team): `c-conv-s1-nofixed` (recon + InfoNCE, encoder only,
-leaderboard 1.088) and `conv-stats-prof` (same checkpoint + stats + profile, leaderboard 1.187).
+Reference: `ct-ref` retrains the team's recipe (recon + InfoNCE) with the same job, seed 0. Its `-enc` export
+corresponds to `c-conv-s1-nofixed` (leaderboard 1.088), and its `-stats-prof` export to `conv-stats-prof`
+(leaderboard 1.187). Track 3 found that seeds differ by at most 0.002.
 
 The augmentations act on the real part of each window relative to its own mean and std. Raw scaling and offsets
 would be no-ops, because the model normalizes each window internally. The left padding is rewritten to the new
@@ -31,8 +32,9 @@ first value, so `real_points` still finds it.
 ```bash
 cd ssl-time-series            # on research/contrastive-ssl
 mkdir -p logs
-DATA=<team project dir> bash slurm/contrastive_variants.sh      # 3 GPU jobs
-DATA=<team project dir> $DATA/.venv/bin/python -m scripts.compare_eval
+sbatch slurm/setup_track4.sbatch          # once: env, corpus, proxy suite, UCR sets (CPU, ~1-2 h)
+bash slurm/contrastive_variants.sh        # 4 GPU jobs: ct-ref + 3 variants
+.venv/bin/python -m scripts.compare_eval
 ```
 
 Each job writes `$NAME-enc.onnx` (compare with `c-conv-s1-nofixed`) and `$NAME-stats-prof.onnx` (compare with
@@ -41,8 +43,8 @@ Each job writes `$NAME-enc.onnx` (compare with `c-conv-s1-nofixed`) and `$NAME-s
 ## Selection rule (one leaderboard upload)
 
 The proxies did not predict the leaderboard (COMBINED_REPORT). Choose on the encoder-only exports: the best
-UCR held-out AUC, ties broken by the suite. Then upload that variant's `-stats-prof` file. If no variant beats
-`c-conv-s1-nofixed` on UCR held-out, upload the best one anyway and report it as a negative result.
+UCR held-out AUC, ties broken by the suite, and compare it with `ct-ref-enc`. Then upload that variant's `-stats-prof` file. If no variant beats
+`ct-ref-enc` on UCR held-out, upload the best one anyway and report it as a negative result.
 
 ## Results
 
