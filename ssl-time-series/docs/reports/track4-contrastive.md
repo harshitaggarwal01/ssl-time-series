@@ -40,6 +40,21 @@ bash slurm/contrastive_variants.sh        # 4 GPU jobs: ct-ref + 3 variants
 Each job writes `$NAME-enc.onnx` (compare with `c-conv-s1-nofixed`) and `$NAME-stats-prof.onnx` (compare with
 `conv-stats-prof`; this is the upload candidate), runs `test_submission.py`, the synthetic suite and both UCR sets.
 
+## Segment pooling (tests the team's task 6 hypothesis)
+
+Every other export averages the encoder's features over the whole window, which discards *where* events happen.
+`--pooling seg2_std` / `seg4_std` (conv only) keep the mean of each of 2 or 4 fixed time segments plus the
+window-wide spread (960 / 1600 dims; 1057 / 1697 with stats + profile). No retraining:
+
+```bash
+sbatch slurm/export_segments.sbatch          # ct-ts2vec and ct-ref, 2 and 4 segments
+.venv/bin/python -m scripts.compare_eval ct-ts2vec-seg2-stats-prof ct-ts2vec-seg4-stats-prof \
+    ct-ref-seg2-stats-prof ct-ref-seg4-stats-prof
+```
+
+Caveat: the leaderboard showed that extra dimensions can hurt (dropping 1,285 untrained dims gave +0.043), so
+watch the larger seg4 export closely.
+
 ## Selection rule (one leaderboard upload)
 
 The proxies did not predict the leaderboard (COMBINED_REPORT). Choose on the encoder-only exports: the best

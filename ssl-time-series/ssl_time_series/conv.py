@@ -18,6 +18,10 @@ from .preprocessing import derived_channels, feature_channel_count, real_points
 STRIDE = 4  # points per position of the representation; full resolution does not fit a 12 GB GPU at batch 512
 MASK_UNIT = 16  # points per masking unit
 OBJECTIVES = ("instance", "hierarchical")
+# Segment pooling (Track 4): the mean of each of N equal time segments plus the spread over the whole window, so the
+# embedding keeps *where* in the window things happen. Conv encoder only; N * D + D dimensions.
+SEGMENT_POOLINGS = ("seg2_std", "seg4_std")
+CONV_POOLINGS = POOLINGS + SEGMENT_POOLINGS
 
 
 class Block(nn.Module):
@@ -38,8 +42,8 @@ class ConvEncoder(nn.Module):
         feature_groups: tuple[str, ...] | list[str] = (),
     ):
         super().__init__()
-        if pooling not in POOLINGS:
-            raise ValueError(f"pooling must be one of {POOLINGS}")
+        if pooling not in CONV_POOLINGS:
+            raise ValueError(f"pooling must be one of {CONV_POOLINGS}")
         self.embed_dim = embed_dim
         self.pooling = pooling
         self.real_only = real_only  # normalize and pool over the series alone, not over its left padding
@@ -73,8 +77,28 @@ class ConvEncoder(nn.Module):
         mean = features.mean(dim=-1)
         return mean, features.amax(dim=-1), (features - mean[:, :, None]).pow(2).mean(dim=-1).sqrt()
 
+    def segment_means(self, features: torch.Tensor, x: torch.Tensor, segments: int) -> torch.Tensor:
+        """Mean of ``features`` over each of ``segments`` equal stretches of the window, [B, segments * D].
+
+        Segments are fixed positions in the window (series are right-aligned), so the same part of an aligned series
+        always lands in the same segment. With ``real_only`` a segment averages only its real positions; a segment
+        that is all padding gives zeros.
+        """
+        batch, width, steps = features.shape
+        if self.real_only:
+            weight = real_points(x).reshape(batch, 1, -1, STRIDE).any(dim=-1).to(features.dtype)
+        else:
+            weight = torch.ones_like(features[:, :1])
+        features = (features * weight).reshape(batch, width, segments, steps // segments).sum(dim=-1)
+        count = weight.reshape(batch, 1, segments, steps // segments).sum(dim=-1).clamp(min=1.0)
+        return (features / count).transpose(1, 2).reshape(batch, segments * width)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        mean, peak, spread = self.pooled(self.features(x), x)
+        features = self.features(x)
+        if self.pooling in SEGMENT_POOLINGS:
+            segments = int(self.pooling[3])
+            return torch.cat((self.segment_means(features, x, segments), self.pooled(features, x)[2]), dim=1)
+        mean, peak, spread = self.pooled(features, x)
         parts = {"mean": (mean,), "mean_std": (mean, spread), "mean_max_std": (mean, peak, spread)}
         return torch.cat(parts[self.pooling], dim=1)
 

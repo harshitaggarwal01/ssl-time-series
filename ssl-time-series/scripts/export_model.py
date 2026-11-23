@@ -16,7 +16,7 @@ import torch
 if hasattr(torch.backends, "mha") and hasattr(torch.backends.mha, "set_fastpath_enabled"):
     torch.backends.mha.set_fastpath_enabled(False)
 
-from ssl_time_series.conv import ConvEncoder
+from ssl_time_series.conv import CONV_POOLINGS, ConvEncoder
 from ssl_time_series.export import export_encoder
 from ssl_time_series.fixed import PARTS, FixedFeatures, FixedSubset
 from ssl_time_series.model import POOLINGS, SeriesEncoder
@@ -56,8 +56,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, nargs="+", required=True, help="one or more; concatenated")
     parser.add_argument("--output", type=Path, default=Path("outputs/model.onnx"))
-    parser.add_argument("--pooling", choices=POOLINGS, nargs="+", default=["mean"],
-                        help="how tokens become the embedding; one value, or one per checkpoint")
+    parser.add_argument("--pooling", choices=CONV_POOLINGS, nargs="+", default=["mean"],
+                        help="how tokens become the embedding; one value, or one per checkpoint (seg* = conv only)")
     parser.add_argument("--fixed", action="store_true", help="append the untrained features to the embedding")
     parser.add_argument("--fixed-parts", choices=PARTS, nargs="+",
                         help="append only these parts of the untrained features (instead of --fixed)")

@@ -76,3 +76,24 @@ def test_objectives_train_step(options):
     assert all(torch.isfinite(p.grad).all() for p in encoder.parameters() if p.grad is not None)
     if options.get("reconstruction") == 0.0:
         assert module.reconstruction_head.weight.grad is None
+
+
+@pytest.mark.parametrize("pooling, segments", [("seg2_std", 2), ("seg4_std", 4)])
+def test_segment_pooling_keeps_position(pooling, segments):
+    torch.manual_seed(0)
+    encoder = ConvEncoder(embed_dim=16, hidden=8, depth=3, real_only=True, pooling=pooling).eval()
+    x, _ = batch(4)
+    out = encoder(x)
+    assert out.shape == (4, segments * 16 + 16) and torch.isfinite(out).all()
+    # The window-wide mean of the segment means equals mean pooling when every position is real.
+    plain = ConvEncoder(embed_dim=16, hidden=8, depth=3, real_only=True, pooling="mean_std").eval()
+    plain.load_state_dict(encoder.state_dict())
+    full = torch.tensor([0, 2, 3])  # rows without padding
+    seg = out[full, : segments * 16].reshape(len(full), segments, 16).mean(dim=1)
+    assert torch.allclose(seg, plain(x)[full, :16], atol=1e-5)
+    # Moving an event to another part of the window changes the segment means.
+    y = x.clone()
+    y[0, 0, 100:110] += 500
+    z = x.clone()
+    z[0, 0, 900:910] += 500
+    assert not torch.allclose(encoder(y)[0, : segments * 16], encoder(z)[0, : segments * 16], atol=1e-3)
