@@ -10,12 +10,14 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from .contrastive import augment, hierarchical_contrast, prefix_view
 from .mae import crop_view, sample_mask
 from .model import POOLINGS
 from .preprocessing import derived_channels, feature_channel_count, real_points
 
 STRIDE = 4  # points per position of the representation; full resolution does not fit a 12 GB GPU at batch 512
 MASK_UNIT = 16  # points per masking unit
+OBJECTIVES = ("instance", "hierarchical")
 
 
 class Block(nn.Module):
@@ -78,38 +80,85 @@ class ConvEncoder(nn.Module):
 
 
 class ConvObjective(nn.Module):
-    """Masked reconstruction of the normalized level plus a contrast between two views of each window."""
+    """Masked reconstruction of the normalized level plus a contrast between two views of each window.
+
+    The defaults are the Track 3 recipe. Track 4 options: ``reconstruction`` weights the reconstruction loss (0 =
+    contrastive only; the masking then acts as an augmentation, as in TS2Vec); ``temperature`` is the InfoNCE
+    temperature; ``jitter`` and ``warp`` add scale-aware augmentations to each view; ``objective`` is
+    ``"instance"`` (InfoNCE on the pooled mean and max of two crops) or ``"hierarchical"`` (TS2Vec: instance and
+    temporal contrast at every time scale, on two aligned prefix-dropped views).
+    """
 
     teacher = None  # the training loop updates a teacher where there is one
 
-    def __init__(self, encoder: ConvEncoder, ratio: float = 0.4, span: int = 2, contrast: float = 1.0, resize: bool = False):
+    def __init__(
+        self,
+        encoder: ConvEncoder,
+        ratio: float = 0.4,
+        span: int = 2,
+        contrast: float = 1.0,
+        resize: bool = False,
+        reconstruction: float = 1.0,
+        temperature: float = 0.1,
+        jitter: float = 0.0,
+        warp: float = 0.0,
+        objective: str = "instance",
+        crop_low: float = 0.8,
+    ):
         super().__init__()
+        if objective not in OBJECTIVES:
+            raise ValueError(f"objective must be one of {OBJECTIVES}")
         self.encoder = encoder
         self.ratio = ratio
         self.span = span
         self.contrast = contrast
         self.resize = resize
+        self.reconstruction = reconstruction
+        self.temperature = temperature
+        self.jitter = jitter
+        self.warp = warp
+        self.objective = objective
+        self.crop_low = crop_low
         self.reconstruction_head = nn.Conv1d(encoder.embed_dim, STRIDE, kernel_size=1)
         self.contrast_head = nn.Sequential(nn.LayerNorm(2 * encoder.embed_dim), nn.Linear(2 * encoder.embed_dim, 128))
 
+    def view(self, x: torch.Tensor, valid: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.objective == "hierarchical":
+            view, view_valid = prefix_view(x, valid, self.crop_low)
+        else:
+            view, view_valid = crop_view(x, valid, self.resize, self.crop_low)
+        return augment(view, view_valid, self.jitter, self.warp), view_valid
+
     def view_loss(self, x: torch.Tensor, valid: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Reconstruction loss of one view and its representation [B, D, T / STRIDE]."""
         batch, _, length = x.shape
         units = sample_mask(batch, length // MASK_UNIT, self.ratio, self.span, device=x.device)
         features = self.encoder.features(x, units.repeat_interleave(MASK_UNIT // STRIDE, dim=1))
+        if not self.reconstruction:
+            return features.new_zeros((), dtype=torch.float32), features
         prediction = self.reconstruction_head(features).float().transpose(1, 2).reshape(batch, length)
         weight = units.repeat_interleave(MASK_UNIT, dim=1) & valid
         error = F.smooth_l1_loss(prediction, self.encoder.channels(x)[:, 0], reduction="none")
-        reconstruction = (error * weight).sum() / weight.sum().clamp(min=1)
-        mean, peak, _ = self.encoder.pooled(features, x)
-        return reconstruction, torch.cat((mean, peak), dim=1)
+        return (error * weight).sum() / weight.sum().clamp(min=1), features
 
     def loss(self, x: torch.Tensor, valid: torch.Tensor) -> dict[str, torch.Tensor]:
         """``x`` is [B, 1, T] raw windows; ``valid`` is [B, T], True at real, finite points."""
-        (first, a), (second, b) = (self.view_loss(*crop_view(x, valid, self.resize)) for _ in range(2))
-        a = F.normalize(self.contrast_head(a).float(), dim=-1)
-        b = F.normalize(self.contrast_head(b).float(), dim=-1)
-        logits = a @ b.T / 0.1
-        labels = torch.arange(len(x), device=x.device)
-        contrast = (F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels)) / 2
+        (va, ma), (vb, mb) = self.view(x, valid), self.view(x, valid)
+        (first, fa), (second, fb) = self.view_loss(va, ma), self.view_loss(vb, mb)
+        if self.objective == "hierarchical":
+            real = lambda m: m.reshape(m.shape[0], -1, STRIDE).any(dim=-1)  # noqa: E731
+            contrast = hierarchical_contrast(fa, fb, real(ma) & real(mb))
+        else:
+            a = torch.cat(self.encoder.pooled(fa, va)[:2], dim=1)
+            b = torch.cat(self.encoder.pooled(fb, vb)[:2], dim=1)
+            a = F.normalize(self.contrast_head(a).float(), dim=-1)
+            b = F.normalize(self.contrast_head(b).float(), dim=-1)
+            logits = a @ b.T / self.temperature
+            labels = torch.arange(len(x), device=x.device)
+            contrast = (F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels)) / 2
         reconstruction = (first + second) / 2
-        return {"loss": reconstruction + self.contrast * contrast, "reconstruction": reconstruction, "contrast": contrast}
+        return {
+            "loss": self.reconstruction * reconstruction + self.contrast * contrast,
+            "reconstruction": reconstruction,
+            "contrast": contrast,
+        }

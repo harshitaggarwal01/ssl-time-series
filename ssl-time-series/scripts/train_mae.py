@@ -89,7 +89,9 @@ def train(args: argparse.Namespace) -> Path:
             feature_groups=args.feature_groups,
         )
         module = ConvObjective(
-            encoder, ratio=args.mask_ratio, span=args.mask_span, contrast=args.contrast, resize=args.view == "resize"
+            encoder, ratio=args.mask_ratio, span=args.mask_span, contrast=args.contrast, resize=args.view == "resize",
+            reconstruction=args.reconstruction, temperature=args.temperature, jitter=args.jitter, warp=args.warp,
+            objective=args.objective, crop_low=args.crop_low,
         ).to(device)
     trained =[parameter for parameter in module.parameters() if parameter.requires_grad]  # not the teacher
     optimizer = torch.optim.AdamW(trained, lr=args.learning_rate, betas=(0.9, 0.95), weight_decay=0.05)
@@ -116,16 +118,18 @@ def train(args: argparse.Namespace) -> Path:
         valid = batch["valid"].to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
         with autocast(device):
-            loss = module.loss(x, valid)["loss"]
+            parts = module.loss(x, valid)
+            loss = parts["loss"]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(trained, 1.0)
         optimizer.step()
         schedule.step()
         if module.teacher is not None:  # the momentum rises linearly to 1 over the run
             module.update_teacher(args.teacher_momentum + (1 - args.teacher_momentum) * step / args.steps)
-        recent.append(loss.item())
+        recent.append({name: float(value) for name, value in parts.items()})
         if step == 1 or step % args.log_every == 0 or step == args.steps:
-            row = {"step": step, "loss": float(np.mean(recent)), "seconds": round(time.time() - started, 1)}
+            row = {"step": step, **{name: float(np.mean([r[name] for r in recent])) for name in recent[0]}}
+            row["seconds"] = round(time.time() - started, 1)
             recent = []
             history.append(row)
             print(json.dumps(row), flush=True)
@@ -176,6 +180,13 @@ def main() -> None:
     parser.add_argument("--contrast", type=float, default=0.0, help="weight of the contrastive loss between two views")
     parser.add_argument("--view", choices=("resize", "crop"), default="resize", help="stretch each view or re-pad it")
     parser.add_argument("--crop-low", type=float, default=0.8, help="smallest share of the series a view keeps")
+    # Track 4 (contrastive) options; conv encoder only. The defaults reproduce the Track 3 recipe.
+    parser.add_argument("--reconstruction", type=float, default=1.0, help="weight of the reconstruction loss (0 = contrastive only)")
+    parser.add_argument("--temperature", type=float, default=0.1, help="InfoNCE temperature (instance objective)")
+    parser.add_argument("--jitter", type=float, default=0.0, help="noise std as a share of each window's std")
+    parser.add_argument("--warp", type=float, default=0.0, help="spread of the smooth magnitude-warp curve around 1")
+    parser.add_argument("--objective", choices=("instance", "hierarchical"), default="instance",
+                        help="InfoNCE on pooled crops, or TS2Vec hierarchical instance + temporal contrast")
     parser.add_argument("--decoder-dim", type=int, default=160)
     parser.add_argument("--decoder-depth", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=5e-4)
