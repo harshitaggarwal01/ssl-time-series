@@ -193,3 +193,20 @@ Patch-profile candidates (job 9498646; all pass `test_submission.py`):
 
 Again flat on the proxies. `conv-stats-patch` changes one thing against the 1.187 model (the position block), so its
 task 5 / 6 scores answer the question directly.
+
+## Final night: Track 4 head to head and combined encoders (23 Nov)
+
+`slurm/final_candidates.sbatch` (job 9543835; the corpus had been removed from scratch and was fetched again)
+retrained Track 4's `ct-aug` (seed 0) and exported it next to the leaderboard model. All pass `test_submission.py`.
+UCR = mean ROC AUC.
+
+| model | dims | suite | suite mean AUC | UCR first | UCR held-out |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| conv-stats-patch (leaderboard 1.197) | 785 | 1.358 | 0.933 | 0.923 | 0.915 |
+| ct-aug-stats-patch | 785 | 1.354 | 0.933 | 0.926 | 0.914 |
+| ct-aug-stats-prof | 737 | 1.363 | 0.935 | 0.924 | 0.915 |
+| final-mean (both encoders) | 1105 | 1.362 | 0.935 | 0.929 | 0.917 |
+| final-ms (both encoders, mean + std) | 1425 | 1.363 | 0.935 | 0.927 | 0.917 |
+
+Track 3 vs Track 4 encoders: a tie. The two-encoder ensemble leads on every proxy but by seed-noise margins on the
+held-out set (+0.002). With no refresh left to undo a drop, the recommendation is to keep `conv-stats-patch`.
